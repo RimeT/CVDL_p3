@@ -1,0 +1,11 @@
+# python compile
+*.py[cod]
+__pycache__
+*.info
+*.log
+test.py
+py3-env
+mx_rec
+jobs
+.idea
+sample_code
