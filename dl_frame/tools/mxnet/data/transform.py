@@ -238,8 +238,8 @@ class YOLO3TrainTransform(object):
         """Apply transform to training image/label."""
         # random color jittering
         img = src
-        if self.channels == 3:
-            img = experimental.image.random_color_distort(src)
+        # if self.channels == 3:
+        #     img = experimental.image.random_color_distort(src)
 
         # random expansion with prob 0.5
         if np.random.uniform(0, 1) > 0.5 and self.channels == 3:
@@ -249,19 +249,19 @@ class YOLO3TrainTransform(object):
             img, bbox = img, label
 
         # random cropping
-        h, w, _ = img.shape
+        h, w = img.shape[0:2]
         bbox, crop = experimental.bbox.random_crop_with_constraints(bbox, (w, h))
         x0, y0, w, h = crop
         img = mx.image.fixed_crop(img, x0, y0, w, h)
 
         # resize with random interpolation
-        h, w, _ = img.shape
+        h, w= img.shape[0:2]
         interp = np.random.randint(0, 5)
         img = timage.imresize(img, self._width, self._height, interp=interp)
         bbox = tbbox.resize(bbox, (w, h), (self._width, self._height))
 
         # random horizontal flip
-        h, w, _ = img.shape
+        h, w = img.shape[0:2]
         img, flips = timage.random_flip(img, px=0.5)
         bbox = tbbox.flip(bbox, (w, h), flip_x=flips[0])
 

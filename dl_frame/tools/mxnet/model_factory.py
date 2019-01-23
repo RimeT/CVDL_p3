@@ -54,8 +54,29 @@ def print_snapshot_stats(logger, snap_pf, epoch):
     logger.info('Snapshotting to %s', snapshot_path)
 
 
+def _mixup_transform(label, classes, lam=1, eta=0.0):
+    if isinstance(label, nd.NDArray):
+        label = [label]
+    res = []
+    for l in label:
+        y1 = l.one_hot(classes, on_value=1 - eta + eta / classes, off_value=eta / classes)
+        y2 = l[::-1].one_hot(classes, on_value=1 - eta + eta / classes, off_value=eta / classes)
+        res.append(lam * y1 + (1 - lam) * y2)
+    return res
+
+
+def _smooth(label, classes, eta=0.1):
+    if isinstance(label, nd.NDArray):
+        label = [label]
+    smoothed = []
+    for l in label:
+        res = l.one_hot(classes, on_value=1 - eta + eta / classes, off_value=eta / classes)
+        smoothed.append(res)
+    return smoothed
+
+
 class ModelFactory(object):
-    def __init__(self, custom_model, job_dir, gpus) -> None:
+    def __init__(self, custom_model, job_dir, gpus):
         self.logger = logging.getLogger('train_logger')
         self.logger.setLevel(logging.DEBUG)
         fh = logging.FileHandler(os.path.join(job_dir, 'mxnet_training.log'))
@@ -72,7 +93,6 @@ class ModelFactory(object):
         self.custom_obj = None
         self.net = None
         self.class_loss = None
-        self.eval_metric = None
         self.lr_scheduler = None
         self.optimizer = None
         self.job_dir = job_dir
@@ -92,25 +112,32 @@ class ModelFactory(object):
         self.net = self.custom_obj.net_struct()
         custom_init = self.custom_obj.custom_initialization(self.net)
         if custom_init:
-            # self.net.collect_params().reset_ctx(ctx=self.ctx)
-            print('Custom initialing')
+            null_param_exists = False
+            for param in self.net.collect_params().values():
+                if param._data is None:
+                    null_param_exists = True
+                    param.initialize()
+            if null_param_exists:
+                print("Custom initializing. Auto-initialize params._data which is None.")
+            else:
+                print('Custom initializing.')
         else:
             if param_path:
                 print('Loading net params...')
-                self.net.collect_params().load(param_path, ctx=self.ctx)
-                # self.net.collect_params().load(param_path)
+                # self.net.collect_params().load(param_path, ctx=self.ctx)
+                self.net.collect_params().load(param_path)
             else:
                 net_init = self.custom_model.net_init()
                 if isinstance(net_init, Initializer):
                     print('Initializing net with custom function')
-                    self.net.initialize(net_init, ctx=self.ctx)
-                    # self.net.initialize(net_init, force_reinit=True)
+                    # self.net.initialize(net_init, ctx=self.ctx)
+                    self.net.initialize(net_init, force_reinit=True)
                 else:
                     print('Custom initialization access failed, net will be initialized with Xavier')
-                    self.net.initialize(mx.init.Xavier(), ctx=self.ctx)
-                    # self.net.initialize(mx.init.Xavier(), force_reinit=True)
-        self.class_loss = self.custom_obj.class_loss()
-        self.eval_metric = self.custom_obj.eval_metric()
+                    # self.net.initialize(ctx=self.ctx)
+                    self.net.initialize(mx.init.Xavier(), force_reinit=True)
+        nd.waitall()
+        self.net.collect_params().reset_ctx(self.ctx)
 
     def trainer_config(self, optimizer, lr_mode, base_lr, epoch_num, wd, opt_param, **kwargs):
         niters = self.t_loader.niters
@@ -141,23 +168,23 @@ class ModelFactory(object):
     def start_train(self, epoch_num, snap_pf, snap_itv, valid_itv):
         raise NotImplementedError
 
-    def validation(self, net):
-        raise NotImplementedError
+    def validate(self, net, batch_loader, ctx, eval_metric):
+        pass
 
-    @staticmethod
-    def log_format(logger, epoch, batch, speed, lr, params):
-        param_list = []
-        for k in params:
-            param_list.append("%s=%.6f" % (k, params[k]))
-        param_str = " ".join(param_list)
-        logger.info('Epoch[%d] Batch [%d]\tSpeed: %f samples/sec\t%s\tlr=%f' % (
-            epoch, batch, speed, param_str, lr))
+    def save_snap_shot(self, epoch, epoch_num, snap_itv, snap_pf):
+        if epoch % snap_itv == 0 or epoch == (epoch_num - 1):
+            self.net.export(snap_pf, epoch=epoch)
+            print_snapshot_stats(self.logger, snap_pf, epoch)
 
 
 class Classification(ModelFactory):
 
-    def __init__(self, custom_model, job_dir, gpus) -> None:
+    def __init__(self, custom_model, job_dir, gpus):
         super(Classification, self).__init__(custom_model, job_dir, gpus)
+        self.label_smoothing = False
+        self.mixup = False
+        self.mixup_alpha = 0.2
+        self.mixup_off_epoch = 0
 
     def create_dataloader(self, train_db, valid_db, **kwargs):
         self.t_loader = LoaderFactory.set_source('classification', train_db, **kwargs)
@@ -200,54 +227,115 @@ class Classification(ModelFactory):
             # custom_v_fn = self.custom_model.val_data_transform()
             self.v_loader.setup(batch_size, False, resizer)
 
+        self.label_smoothing = self.custom_obj.label_smoothing()
+        mixup_params = self.custom_obj.mixup()
+        self.mixup = mixup_params['mixup']
+        self.mixup_alpha = mixup_params['mixup_alpha']
+        self.mixup_off_epoch = mixup_params['mixup_off_epoch']
+
     def start_train(self, epoch_num, snap_pf, snap_itv, valid_itv):
-        # t1 = time()
-        # self.net.collect_params().reset_ctx(self.ctx)
-        # print("reset net params to {}, time costs={}".format(self.ctx, time() - t1))
         self.logger.info("Classification start training")
+        class_loss = self.custom_obj.class_loss()
+        best_val_score = 1
+        t_eval_metric = self.custom_obj.train_eval_metric()
+        v_eval_metric = self.custom_obj.val_eval_metric()
+
+        t_volume = self.t_loader.niters
+        t_week = t_volume / self.t_loader.batch_size
+        v_volume = self.v_loader.niters
+        v_week = v_volume / self.v_loader.batch_size
         smoothing_constant = .01
         batch_size = self.t_loader.batch_size
         for epoch in range(epoch_num):
+            tic = time()
             btic = time()
             tbar = tqdm(self.t_loader.batch_loader)
-            self.eval_metric.reset()
+            t_eval_metric.reset()
             self.net.hybridize()
             for idx, (data, label) in enumerate(tbar):
                 data_list = split_and_load(data, ctx_list=self.ctx)
                 label_list = split_and_load(label, ctx_list=self.ctx)
+                if self.mixup:
+                    lam = np.random.beta(self.mixup_alpha, self.mixup_alpha)
+                    if epoch >= epoch_num - self.mixup_off_epoch:
+                        lam = 1
+                    data_list = [lam * X + (1 - lam) * X[::-1] for X in data_list]
+
+                    if self.label_smoothing:
+                        eta = 0.1
+                    else:
+                        eta = 0.0
+                    label_list = _mixup_transform(label_list, len(self.t_loader.classes), lam, eta)
+                elif self.label_smoothing:
+                    hard_label = label_list
+                    label_list = _smooth(label_list, len(self.t_loader.classes))
                 with autograd.record(True):
                     outputs = [self.net(X.astype('float32', copy=False)) for X in data_list]
-                    losses = [self.class_loss(o, ll.astype('float32', copy=False)) for (o, ll) in
+                    losses = [class_loss(o, ll.astype('float32', copy=False)) for (o, ll) in
                               zip(outputs, label_list)]
                 for l in losses:
                     l.backward()
                 self.lr_scheduler.update(idx, epoch)
                 self.optimizer.step(batch_size)
-                self.eval_metric.update(label_list, outputs)
+                if self.mixup:
+                    output_softmax = [nd.SoftmaxActivation(out.astype('float32', copy=False)) \
+                                      for out in outputs]
+                    t_eval_metric.update(label, output_softmax)
+                else:
+                    if self.label_smoothing:
+                        t_eval_metric.update(hard_label, outputs)
+                    else:
+                        t_eval_metric.update(label, outputs)
                 curr_loss = [nd.mean(l).asscalar() for l in losses]
                 curr_loss = np.mean(curr_loss)
                 moving_loss = (curr_loss if ((idx == 0) and (epoch == 0))
                                else (1 - smoothing_constant) * moving_loss + smoothing_constant * curr_loss)
 
                 # log
-                tbar.set_description("epoch %d batch %d loss=%f" % (epoch, idx, moving_loss))
+                _, acc = t_eval_metric.get()
+                tbar.set_description("epoch %d batch %d loss=%f acc=%f" % (epoch, idx, moving_loss, acc))
                 if not idx % self.log_interval:
                     params = dict()
-                    train_metric_name, train_metic_score = self.eval_metric.get()
+                    train_metric_name, train_metic_score = t_eval_metric.get()
                     params[train_metric_name] = train_metic_score
                     params['loss'] = moving_loss
                     speed = batch_size * self.log_interval / (time() - btic)
-                    self.log_format(self.logger, epoch, idx, speed, self.optimizer.learning_rate, params)
+                    params['speed'] = speed
+                    print_train_stats(self.logger, 1, t_week, epoch, epoch_num, idx, params)
                     btic = time()
 
-    def validation(self, net):
-        self.logger.info("validation to be continued")
-        print("validation to be continued")
+            # validation
+            if (epoch % valid_itv == 0) or (epoch % snap_itv == 0) or epoch == (epoch_num - 1):
+                v_bar = tqdm(self.v_loader.batch_loader, desc='Validation ', unit='batches')
+                nd.waitall()
+                name, acc = self.validate(self.net, v_bar, self.ctx, v_eval_metric)
+                v_params = dict()
+                v_params[name] = acc
+                # save best
+                if acc < best_val_score:
+                    best_val_score = acc
+                    self.net.save_parameters('%s/%.4f-%d-best.params' % (snap_pf, best_val_score, epoch))
+                    self.optimizer.save_states('%s/%.4f-%d-best.states' % (snap_pf, best_val_score, epoch))
+
+                print_train_stats(self.logger, 2, v_week, epoch, epoch_num, self.v_loader.niters,
+                                  v_params)
+            # snapshots
+            self.save_snap_shot(epoch, epoch_num, snap_itv, snap_pf)
+            self.logger.info('[Epoch {}] Training cost: {:.3f}'.format(epoch, (time() - tic)))
+
+    def validate(self, net, batch_loader, ctx, eval_metric):
+        eval_metric.reset()
+        for idx, (data, label) in enumerate(batch_loader):
+            data_list = split_and_load(data, ctx_list=ctx)
+            label_list = split_and_load(label, ctx_list=ctx)
+            outputs = [net(X) for X in data_list]
+            eval_metric.update(label_list, outputs)
+        return eval_metric.get()
 
 
 class Detection(ModelFactory):
 
-    def __init__(self, custom_model, job_dir, gpus) -> None:
+    def __init__(self, custom_model, job_dir, gpus):
         super(Detection, self).__init__(custom_model, job_dir, gpus)
 
     def create_dataloader(self, train_db, valid_db, **kwargs):
@@ -274,7 +362,7 @@ class Detection(ModelFactory):
         t_volume = self.t_loader.niters
         self.t_week = t_volume / self.t_loader.batch_size
         v_volume = self.v_loader.niters
-        self.v_week = v_volume / self.v_loader.batch_size
+        v_week = v_volume / self.v_loader.batch_size
 
         for epoch in range(epoch_num):
             self.epoch = epoch  # used for training log calculation
@@ -294,12 +382,13 @@ class Detection(ModelFactory):
                 v_params = dict()
                 for name, ap in zip(map_name, mean_ap):
                     v_params[name] = ap
-                print_train_stats(self.logger, 2, self.v_week, self.epoch, self.epoch_num, self.v_loader.niters,
+                print_train_stats(self.logger, 2, v_week, self.epoch, self.epoch_num, self.v_loader.niters,
                                   v_params)
             # saving snapshots
-            if epoch % snap_itv == 0 or epoch == (epoch_num - 1):
-                self.net.export(snap_pf, epoch=epoch)
-                print_snapshot_stats(self.logger, snap_pf, epoch)
+            self.save_snap_shot(epoch, epoch_num, snap_itv, snap_pf)
+            # if epoch % snap_itv == 0 or epoch == (epoch_num - 1):
+            #     self.net.export(snap_pf, epoch=epoch)
+            #     print_snapshot_stats(self.logger, snap_pf, epoch)
 
             self.logger.info('[Epoch {}] Training cost: {:.3f}'.format(epoch, (time() - tic)))
 

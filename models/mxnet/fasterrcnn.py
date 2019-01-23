@@ -92,14 +92,17 @@ class RCNNL1LossMetric(mx.metric.EvalMetric):
 class CustomModel(DetectionModel):
 
     def net_struct(self):
-        return get_model('faster_rcnn_resnet101_v1d_custom', classes=self.classes, pretrained_base=False)
-
-    def eval_metric(self):
-        return VOC07MApMetric(iou_thresh=0.5, class_names=self.classes)
+        return get_model('faster_rcnn_resnet50_v1b_custom', classes=self.classes, pretrained_base=False, transfer='voc')
 
     @staticmethod
     def net_init():
         return mx.init.Xavier()
+
+    def custom_initialization(self, net):
+        return True
+
+    def eval_metric(self):
+        return VOC07MApMetric(iou_thresh=0.5, class_names=self.classes)
 
     def train_data_transform(self, **kwargs):
         net = kwargs['net']
@@ -230,8 +233,9 @@ class CustomModel(DetectionModel):
                 for metric in self.metrics + self.metrics2:
                     name, loss = metric.get()
                     params[name] = loss
+                sum_loss = sum(params[p] for p in params)
                 params['lr'] = optimizer.learning_rate
                 params['speed'] = time() - btic
                 print_log(idx, params)
-                self.dynamic_bar(batch_loader, epoch, idx, speed=params['speed'])
+                self.dynamic_bar(batch_loader, epoch, idx, sum_loss=sum_loss, speed=params['speed'])
             btic = time()

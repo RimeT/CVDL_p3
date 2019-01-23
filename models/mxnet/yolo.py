@@ -10,14 +10,20 @@ from mxnet import gluon, autograd
 class CustomModel(DetectionModel):
 
     def net_struct(self):
-        return get_model('yolo3_darknet53_custom', pretrained=False, classes=self.classes, pretrained_base=False)
+        classes = self.classes
+        classes.append("dummy")
+        return get_model('yolo3_darknet53_custom', pretrained=True, classes=classes,
+                         pretrained_base=False, transfer='voc')
 
     def eval_metric(self):
         return VOC07MApMetric(iou_thresh=0.5, class_names=self.classes)
 
     @staticmethod
     def net_init():
-        return mx.init.Xavier()
+        return mx.init.Uniform()
+
+    def custom_initialization(self, net):
+        return True
 
     def train_data_transform(self, **kwargs):
         return YOLO3TrainTransform(kwargs['r_width'], kwargs['r_height'], kwargs['net'], channels=1)
@@ -29,7 +35,11 @@ class CustomModel(DetectionModel):
     def val_data_transform(self, **kwargs):
         return YOLO3ValTransform(kwargs['r_width'], kwargs['r_height'])
 
+    def v_batchify_fn(self):
+        return batchify.Tuple(batchify.Stack(), batchify.Pad(pad_val=-1))
+
     def evaluations(self):
+        self.sum_metrics = mx.metric.Loss('SumLoss')
         self.obj_metrics = mx.metric.Loss('ObjLoss')
         self.center_metrics = mx.metric.Loss('BoxCenterLoss')
         self.scale_metrics = mx.metric.Loss('BoxScaleLoss')
@@ -70,6 +80,10 @@ class CustomModel(DetectionModel):
     def train_batch(self, net, optimizer, epoch, batch_loader, lr_scheduler, batch_size, ctx, log_interval,
                     print_log):
         btic = time()
+        self.obj_metrics.reset()
+        self.center_metrics.reset()
+        self.scale_metrics.reset()
+        self.cls_metrics.reset()
         for idx, batch in enumerate(batch_loader):
             lr_scheduler.update(idx, epoch)
             data = gluon.utils.split_and_load(batch[0], ctx_list=ctx, batch_axis=0)
@@ -92,16 +106,19 @@ class CustomModel(DetectionModel):
                 mx.nd.waitall()
                 autograd.backward(sum_losses)
             optimizer.step(batch_size)
+            self.sum_metrics.update(0, sum_losses)
             self.obj_metrics.update(0, obj_losses)
             self.center_metrics.update(0, center_losses)
             self.scale_metrics.update(0, scale_losses)
             self.cls_metrics.update(0, cls_losses)
             if not (idx + 1) % log_interval:
+                name0, loss0 = self.sum_metrics.get()
                 name1, loss1 = self.obj_metrics.get()
                 name2, loss2 = self.center_metrics.get()
                 name3, loss3 = self.scale_metrics.get()
                 name4, loss4 = self.cls_metrics.get()
                 params = dict()
+                params[name0] = loss0
                 params[name1] = loss1
                 params[name2] = loss2
                 params[name3] = loss3
@@ -110,5 +127,5 @@ class CustomModel(DetectionModel):
                 speed = batch_size / (time() - btic)
                 params['speed'] = speed
                 print_log(idx, params)
-                self.dynamic_bar(batch_loader, epoch, idx, speed=speed, loss=loss1)
+                self.dynamic_bar(batch_loader, epoch, idx, speed=speed, sum_loss=loss0)
             btic = time()

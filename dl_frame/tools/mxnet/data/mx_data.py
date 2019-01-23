@@ -2,9 +2,10 @@ import os
 
 from gluoncv.data import RecordFileDetection
 from mxnet.gluon.data import DataLoader
-from mxnet.gluon.data.vision import ImageRecordDataset, ImageFolderDataset, transforms as gdt
+from mxnet.gluon.data.vision import ImageRecordDataset, transforms as gdt
 
 from . import LstDetection
+from . import ImageFolderDataset
 
 DB_EXTENSIONS = {
     'rec': ['.REC'],
@@ -56,7 +57,7 @@ def get_backend_of_source(db_path):
 
 
 class LoaderFactory(object):
-    def __init__(self, db_path, labels, data_format, **kwargs) -> None:
+    def __init__(self, db_path, labels, data_format, **kwargs):
         self._dataset = None
         self.db_path = db_path
         self.classes = labels
@@ -96,7 +97,7 @@ class LoaderFactory(object):
 
 class ClassLoader(LoaderFactory):
 
-    def __init__(self, db_path, **kwargs) -> None:
+    def __init__(self, db_path, **kwargs):
         super(ClassLoader, self).__init__(db_path, **kwargs)
 
     def setup(self, batch_size, shuffle, fn=None, **kwargs):
@@ -122,18 +123,19 @@ class ClassLoader(LoaderFactory):
 
 class ClassFolderLoader(ClassLoader):
 
-    def __init__(self, db_path, **kwargs) -> None:
+    def __init__(self, db_path, **kwargs):
         super(ClassFolderLoader, self).__init__(db_path, **kwargs)
         self._dataset = ImageFolderDataset(self.db_path,
                                            flag=self.channel_flag,
-                                           transform=None)
+                                           transform=None,
+                                           is_dicom=self.is_dicom)
         self.data_volume = len(self._dataset)
         self.channels = self._dataset[0][0].shape[-1]
 
 
 class ClassRecLoader(ClassLoader):
 
-    def __init__(self, db_path, **kwargs) -> None:
+    def __init__(self, db_path, **kwargs):
         super(ClassRecLoader, self).__init__(db_path, **kwargs)
         self._dataset = ImageRecordDataset(db_path, self.channel_flag)
         self.data_volume = len(self._dataset)
@@ -142,7 +144,7 @@ class ClassRecLoader(ClassLoader):
 
 class DetectionLoader(LoaderFactory):
 
-    def __init__(self, db_path, **kwargs) -> None:
+    def __init__(self, db_path, **kwargs):
         super(DetectionLoader, self).__init__(db_path, **kwargs)
 
     def setup(self, batch_size, shuffle, fn, **kwargs):
@@ -154,14 +156,15 @@ class DetectionLoader(LoaderFactory):
                                        batch_size, shuffle,
                                        batchify_fn=batchify_fn,
                                        last_batch='rollover',
-                                       # num_workers=4,
+                                       # num_workers=8,
+                                       pin_memory=True
                                        )
         self.niters = len(self.batch_loader)
 
 
 class DetectLstLoader(DetectionLoader):
 
-    def __init__(self, db_path, root, **kwargs) -> None:
+    def __init__(self, db_path, root, **kwargs):
         super(DetectLstLoader, self).__init__(db_path, **kwargs)
         self._dataset = LstDetection(db_path, root=root, flag=self.channel_flag, is_dicom=self.is_dicom)
         self.data_volume = len(self._dataset)
@@ -170,7 +173,7 @@ class DetectLstLoader(DetectionLoader):
 
 class DetectRecLoader(DetectionLoader):
 
-    def __init__(self, db_path, **kwargs) -> None:
+    def __init__(self, db_path, **kwargs):
         super(DetectRecLoader, self).__init__(db_path, **kwargs)
         self._dataset = RecordFileDetection(db_path, coord_normalized=True)
         self.data_volume = len(self._dataset)

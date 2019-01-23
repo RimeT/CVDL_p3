@@ -2,6 +2,7 @@ from time import time
 
 import gluoncv as gcv
 import mxnet as mx
+import copy
 from custom_model import DetectionModel
 from data.transform import SSDTrainTransform, SSDValTransform
 from gluoncv.data import batchify
@@ -14,24 +15,24 @@ from mxnet import gluon, autograd
 class CustomModel(DetectionModel):
 
     def net_struct(self):
-        return get_model('ssd_512_vgg16_atrous_custom', pretrained=False, classes=self.classes, pretrained_base=False)
+        return get_model('ssd_512_vgg16_atrous_custom', classes=self.classes, pretrained_base=False,
+                         transfer='voc')
 
     @staticmethod
     def net_init():
         return mx.init.Xavier()
 
     def custom_initialization(self, net):
-        return False
+        return True
 
     def eval_metric(self):
         return VOC07MApMetric(iou_thresh=0.5, class_names=self.classes)
 
     def train_data_transform(self, **kwargs):
         with autograd.train_mode():
-            net = get_model('ssd_512_vgg16_atrous_custom', pretrained=True, classes=self.classes, pretrained_base=False)
-            net.collect_params().initialize()
-            # net = kwargs['net']
-            _, _, anchors = net(mx.nd.zeros(shape=(1, 1, kwargs['r_height'], kwargs['r_width'])))
+            net = copy.deepcopy(kwargs['net'])
+            net.collect_params().reset_ctx(None)
+            _, _, anchors = net(mx.nd.zeros(shape=(1, kwargs['channels'], kwargs['r_height'], kwargs['r_width'])))
         return SSDTrainTransform(kwargs['r_width'], kwargs['r_height'], anchors, dicom=False)
 
     def t_batchify_fn(self):
@@ -49,6 +50,7 @@ class CustomModel(DetectionModel):
         metrics will be invoked before training
         :return:
         """
+        self.sum_metric = mx.metric.Loss('SumLoss')
         self.mbox_loss = gcv.loss.SSDMultiBoxLoss()
         self.ce_metric = mx.metric.Loss('CrossEntropy')
         self.smoothl1_metric = mx.metric.Loss('SmoothL1')
@@ -93,6 +95,7 @@ class CustomModel(DetectionModel):
         :param lr_scheduler:
         :return:
         """
+        self.sum_metric.reset()
         self.ce_metric.reset()
         self.smoothl1_metric.reset()
         btic = time()
@@ -113,17 +116,20 @@ class CustomModel(DetectionModel):
                 mx.nd.waitall()
                 autograd.backward(sum_loss)
             optimizer.step(1)
+            self.sum_metric.update(0, [l * batch_size for l in sum_loss])
             self.ce_metric.update(0, [l * batch_size for l in cls_loss])
             self.smoothl1_metric.update(0, [l * batch_size for l in box_loss])
             if not (idx + 1) % log_interval:
                 params = dict()
+                name0, loss0 = self.sum_metric.get()
                 name1, loss1 = self.ce_metric.get()
                 name2, loss2 = self.smoothl1_metric.get()
+                params[name0] = loss0
                 params[name1] = loss1
                 params[name2] = loss2
                 params['lr'] = optimizer.learning_rate
                 speed = batch_size / (time() - btic)
                 params['speed'] = speed
                 print_log(idx, params)
-                self.dynamic_bar(batch_loader, epoch, idx, lr=optimizer.learning_rate, loss=loss1)
+                self.dynamic_bar(batch_loader, epoch, idx, lr=optimizer.learning_rate, loss=loss0)
             btic = time()

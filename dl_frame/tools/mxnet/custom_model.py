@@ -2,11 +2,12 @@ from __future__ import absolute_import
 
 import mxnet as mx
 from tqdm import tqdm
+from gluoncv.data import batchify
 
 
 class Model(object):
 
-    def __init__(self, classes, ctx, logger) -> None:
+    def __init__(self, classes, ctx, logger):
         if ctx is None:
             ctx = [mx.gpu(i) for i in mx.test_utils.list_gpus()]
         if classes is None:
@@ -22,8 +23,8 @@ class Model(object):
     def class_loss(self):
         pass
 
-    def eval_metric(self):
-        raise NotImplementedError
+    def val_eval_metric(self):
+        pass
 
     @staticmethod
     def net_init():
@@ -65,6 +66,18 @@ class ClassificationModel(Model):
     def class_loss(self):
         raise NotImplementedError
 
+    def mixup(self):
+        raise NotImplementedError
+
+    def label_smoothing(self):
+        return False
+
+    def train_eval_metric(self):
+        pass
+
+    def val_eval_metric(self):
+        raise NotImplementedError
+
 
 class DetectionModel(Model):
 
@@ -72,7 +85,7 @@ class DetectionModel(Model):
         raise NotImplementedError
 
     def v_batchify_fn(self):
-        return None
+        return batchify.Tuple(batchify.Stack(), batchify.Pad(pad_val=-1))
 
     def train_data_transform(self, **kwargs):
         raise NotImplementedError

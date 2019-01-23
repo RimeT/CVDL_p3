@@ -20,7 +20,7 @@ def load_config(ini_path):
 def load_mx_config():
     project_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     config_dir = os.path.join(project_path, 'config')
-    config_file = "mx_det_config.ini"
+    config_file = "mx_class_config.ini"
     config = load_config(os.path.join(config_dir, config_file))
     return config
 
@@ -136,38 +136,7 @@ def main():
         exit(-1)
 
     # get model
-    # model = ModelFactory.get_model(ml_type, CustomModel, job_dir, gpus)
     model = get_model_frame(ml_type, CustomModel, job_dir, gpus)
-    # data transform
-    # resizer = None
-    # if resize_type == 1:
-    #     resizer = gdt.Resize((width, height))
-    # if is_crop:
-    #     resizer = gdt.Compose([
-    #         resizer,
-    #         gdt.CenterCrop((crop_width, crop_height))
-    #     ])
-    # random_flip = None
-    # if rand_flip == 1:
-    #     random_flip = gdt.RandomFlipLeftRight()
-    # elif rand_flip == 2:
-    #     random_flip = gdt.RandomFlipTopBottom()
-    # elif rand_flip == 3:
-    #     random_flip = gdt.Compose([
-    #         gdt.RandomFlipLeftRight(),
-    #         gdt.RandomFlipTopBottom()
-    #     ])
-    # random_color_jitter = gdt.RandomColorJitter(brightness=rand_brightness,
-    #                                             contrast=rand_contrast,
-    #                                             saturation=rand_saturation,
-    #                                             hue=rand_hue)
-    # random_resize_crop = gdt.RandomResizedCrop(rrc_size, rrc_scale, rrc_ratio)
-    # aug = gdt.Compose([
-    #     # random_resize_crop,
-    #     random_flip,
-    #     random_color_jitter,
-    # ])
-    # label parse
     t1 = time()
     if os.path.isfile(label_txt):
         with open(label_txt, 'r') as label_f:
@@ -206,7 +175,8 @@ def main():
                      rrc_scale=rrc_scale,
                      rrc_ratio=rrc_ratio,
                      window_center=window_center,
-                     window_width=window_width)
+                     window_width=window_width,
+                     channels=model.t_loader.channels)
     print('data_setup costs={}'.format(time() - t1))
     t1 = time()
     model.trainer_config(optimizer, lr_mode, base_lr, epoch_num, wd, opt_param,
