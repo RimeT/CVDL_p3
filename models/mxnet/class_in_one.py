@@ -10,7 +10,7 @@ class CustomModel(ClassificationModel):
     def net_struct(self):
         # train from scratch
         kwargs = {'pretrained': False, 'classes': len(self.classes)}
-        return get_model('densenet121', **kwargs)
+        return get_model('se_resnext50_32x4d', **kwargs)
         # pretrained
         # kwargs = {'pretrained': True}
         # return get_model('resnet50_v2', **kwargs)

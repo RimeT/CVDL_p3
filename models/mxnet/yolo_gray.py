@@ -12,10 +12,10 @@ class CustomModel(DetectionModel):
     def net_struct(self):
         classes = self.classes
         classes.append("dummy")
-        return get_model('yolo3_darknet53_custom', pretrained=True, classes=classes,
-                         pretrained_base=False, transfer='voc')
-        # return get_model('yolo3_darknet53_custom', pretrained=False, classes=classes,
-        #                  pretrained_base=False)
+        # return get_model('yolo3_darknet53_custom', pretrained=True, classes=classes,
+        #                  pretrained_base=False, transfer='voc')
+        return get_model('yolo3_darknet53_custom', pretrained=False, classes=classes,
+                         pretrained_base=False)
 
 
     def eval_metric(self):

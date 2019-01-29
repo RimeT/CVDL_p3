@@ -357,7 +357,7 @@ def parse_args():
     rgroup.add_argument('--color', type=int, default=1, choices=[-1, 0, 1],
                         help='specify the color mode of the loaded image.\
         1: Loads a color image. Any transparency of image will be neglected. It is the default flag.\
-        0: Loads image in grayscale mode.\
+        0: Loads image in dcscale mode.\
         -1:Loads image as such including alpha channel.')
     rgroup.add_argument('--encoding', type=str, default='.jpg', choices=['.jpg', '.png'],
                         help='specify the encoding of the images.')

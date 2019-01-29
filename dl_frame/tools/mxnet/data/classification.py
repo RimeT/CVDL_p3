@@ -1,9 +1,12 @@
 from __future__ import absolute_import
+
 import os
 import warnings
+
+import pydicom
 from mxnet import image, nd
 from mxnet.gluon.data.vision.datasets import dataset
-import pydicom
+
 
 class ImageFolderDataset(dataset.Dataset):
     """A dataset for loading image files stored in a folder structure.
@@ -36,6 +39,7 @@ class ImageFolderDataset(dataset.Dataset):
     items : list of tuples
         List of all images in (filename, label) pairs.
     """
+
     def __init__(self, root, flag=1, transform=None, is_dicom=False):
         self._root = os.path.expanduser(root)
         self._flag = flag
@@ -51,7 +55,7 @@ class ImageFolderDataset(dataset.Dataset):
         for folder in sorted(os.listdir(root)):
             path = os.path.join(root, folder)
             if not os.path.isdir(path):
-                warnings.warn('Ignoring %s, which is not a directory.'%path, stacklevel=3)
+                warnings.warn('Ignoring %s, which is not a directory.' % path, stacklevel=3)
                 continue
             label = len(self.synsets)
             self.synsets.append(folder)
@@ -59,7 +63,7 @@ class ImageFolderDataset(dataset.Dataset):
                 filename = os.path.join(path, filename)
                 ext = os.path.splitext(filename)[1]
                 if ext.lower() not in self._exts:
-                    warnings.warn('Ignoring %s of type %s. Only support %s'%(
+                    warnings.warn('Ignoring %s of type %s. Only support %s' % (
                         filename, ext, ', '.join(self._exts)))
                     continue
                 self.items.append((filename, label))

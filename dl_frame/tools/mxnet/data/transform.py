@@ -165,7 +165,7 @@ class SSDValTransform(object):
 
     """
 
-    def __init__(self, width, height, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
+    def __init__(self, width, height, mean=0.485, std=0.224):
         self._width = width
         self._height = height
         self._mean = mean
@@ -359,8 +359,8 @@ class FasterRCNNTrainTransform(object):
 
     """
 
-    def __init__(self, short=600, max_size=1000, net=None, mean=(0.485, 0.456, 0.406),
-                 std=(0.229, 0.224, 0.225), box_norm=(1., 1., 1., 1.),
+    def __init__(self, short=600, max_size=1000, net=None, mean=0.456,
+                 std=0.224, box_norm=(1., 1., 1., 1.),
                  num_sample=256, pos_iou_thresh=0.7, neg_iou_thresh=0.3,
                  pos_ratio=0.5, **kwargs):
         self._short = short

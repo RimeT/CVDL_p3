@@ -33,7 +33,7 @@ class CustomModel(DetectionModel):
             net = copy.deepcopy(kwargs['net'])
             net.collect_params().reset_ctx(None)
             _, _, anchors = net(mx.nd.zeros(shape=(1, kwargs['channels'], kwargs['r_height'], kwargs['r_width'])))
-        return SSDTrainTransform(kwargs['r_width'], kwargs['r_height'], anchors, dicom=False)
+        return SSDTrainTransform(kwargs['r_width'], kwargs['r_height'], anchors, dicom=True)
 
     def t_batchify_fn(self):
         return batchify.Tuple(batchify.Stack(), batchify.Stack(), batchify.Stack())

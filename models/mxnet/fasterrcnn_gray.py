@@ -92,8 +92,8 @@ class RCNNL1LossMetric(mx.metric.EvalMetric):
 class CustomModel(DetectionModel):
 
     def net_struct(self):
-        return get_model('faster_rcnn_resnet50_v1b_custom', classes=self.classes, pretrained_base=False, transfer='voc')
-
+        # return get_model('faster_rcnn_resnet50_v1b_custom', classes=self.classes, pretrained_base=False, transfer='voc')
+        return get_model('faster_rcnn_resnet50_v1b_custom', pretrained=False, classes=self.classes, pretrained_base=False)
 
     @staticmethod
     def net_init():

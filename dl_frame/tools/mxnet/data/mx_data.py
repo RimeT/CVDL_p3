@@ -1,8 +1,9 @@
 import os
 
-from gluoncv.data import RecordFileDetection
+# from gluoncv.data import RecordFileDetection
 from mxnet.gluon.data import DataLoader
 from mxnet.gluon.data.vision import ImageRecordDataset, transforms as gdt
+from detection import RecordFileDetection
 
 from . import LstDetection
 from . import ImageFolderDataset
@@ -175,6 +176,6 @@ class DetectRecLoader(DetectionLoader):
 
     def __init__(self, db_path, **kwargs):
         super(DetectRecLoader, self).__init__(db_path, **kwargs)
-        self._dataset = RecordFileDetection(db_path, coord_normalized=True)
+        self._dataset = RecordFileDetection(db_path, coord_normalized=True, flag=self.channel_flag)
         self.data_volume = len(self._dataset)
         self.channels = self._dataset[0][0].shape[-1]

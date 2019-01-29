@@ -1,12 +1,29 @@
 """Detection Dataset from LST file."""
 from __future__ import absolute_import
+
 import os
+
+import mxnet as mx
 import numpy as np
 import pydicom
-import mxnet as mx
-from mxnet import nd
-from mxnet.gluon.data import Dataset
 from gluoncv.data.recordio.detection import _transform_label
+from mxnet import nd, gluon
+from mxnet.gluon.data import Dataset
+
+
+class RecordFileDetection(gluon.data.vision.ImageRecordDataset):
+    def __init__(self, filename, coord_normalized=True, flag=1):
+        super(RecordFileDetection, self).__init__(filename, flag)
+        self._coord_normalized = coord_normalized
+
+    def __getitem__(self, idx):
+        img, label = super(RecordFileDetection, self).__getitem__(idx)
+        h, w, _ = img.shape
+        if self._coord_normalized:
+            label = _transform_label(label, h, w)
+        else:
+            label = _transform_label(label)
+        return img, label
 
 
 class LstDetection(Dataset):
@@ -28,6 +45,7 @@ class LstDetection(Dataset):
         If so, we will rescale back to absolute coordinates by multiplying width or height.
 
     """
+
     def __init__(self, filename, root='', flag=1, is_dicom=False, coord_normalized=True):
         self._is_dicom = is_dicom
         self._flag = flag

@@ -171,8 +171,8 @@ class ModelFactory(object):
     def validate(self, net, batch_loader, ctx, eval_metric):
         pass
 
-    def save_snap_shot(self, epoch, epoch_num, snap_itv, snap_pf):
-        if epoch % snap_itv == 0 or epoch == (epoch_num - 1):
+    def save_snap_shot(self, epoch, epoch_num, snap_itv, snap_pf, valid_itv):
+        if not (epoch % snap_itv) or epoch == (epoch_num - 1) or not (epoch % valid_itv):
             self.net.export(snap_pf, epoch=epoch)
             print_snapshot_stats(self.logger, snap_pf, epoch)
 
@@ -320,7 +320,7 @@ class Classification(ModelFactory):
                 print_train_stats(self.logger, 2, v_week, epoch, epoch_num, self.v_loader.niters,
                                   v_params)
             # snapshots
-            self.save_snap_shot(epoch, epoch_num, snap_itv, snap_pf)
+            self.save_snap_shot(epoch, epoch_num, snap_itv, snap_pf, valid_itv)
             self.logger.info('[Epoch {}] Training cost: {:.3f}'.format(epoch, (time() - tic)))
 
     def validate(self, net, batch_loader, ctx, eval_metric):
@@ -385,7 +385,7 @@ class Detection(ModelFactory):
                 print_train_stats(self.logger, 2, v_week, self.epoch, self.epoch_num, self.v_loader.niters,
                                   v_params)
             # saving snapshots
-            self.save_snap_shot(epoch, epoch_num, snap_itv, snap_pf)
+            self.save_snap_shot(epoch, epoch_num, snap_itv, snap_pf, valid_itv)
             # if epoch % snap_itv == 0 or epoch == (epoch_num - 1):
             #     self.net.export(snap_pf, epoch=epoch)
             #     print_snapshot_stats(self.logger, snap_pf, epoch)

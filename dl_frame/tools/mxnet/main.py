@@ -20,7 +20,7 @@ def load_config(ini_path):
 def load_mx_config():
     project_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
     config_dir = os.path.join(project_path, 'config')
-    config_file = "mx_class_config.ini"
+    config_file = "mx_det_config.ini"
     config = load_config(os.path.join(config_dir, config_file))
     return config
 
@@ -42,6 +42,7 @@ def main():
     snap_prefix = config['job']['snap_prefix']
     # -data
     data_format = config['data']['data_format']
+    dcm_slices = config['data']['dcm_slices']
     label_txt = config['data']['label_txt']
     t_datapath = config['data']['train_path']
     t_root = config['data']['t_root']
