@@ -8,7 +8,6 @@ from configparser import ConfigParser
 from time import time, strftime, gmtime
 
 from model_factory import get_model_frame
-from mxnet.gluon.data.vision import transforms as gdt
 
 
 def load_config(ini_path):
@@ -42,7 +41,12 @@ def main():
     snap_prefix = config['job']['snap_prefix']
     # -data
     data_format = config['data']['data_format']
-    dcm_slices = config['data']['dcm_slices']
+    multi_slices = config['data']['multi_slices']
+    if multi_slices == 'True':
+        multi_slices = True
+    else:
+        multi_slices = False
+    dcm_slices = int(config['data']['dcm_slices'])
     label_txt = config['data']['label_txt']
     t_datapath = config['data']['train_path']
     t_root = config['data']['t_root']
@@ -129,7 +133,7 @@ def main():
     ####################################################
 
     # load custom model
-    exec(open(custom_model_path).read(), globals())
+    exec (open(custom_model_path).read(), globals())
     try:
         CustomModel
     except NameError:
@@ -151,7 +155,11 @@ def main():
                                 window_width=window_width)
     elif ml_type == 'object-detection':
         model.create_dataloader(t_datapath, v_datapath, labels=labels, data_format=data_format,
-                                t_root=t_root, v_root=v_root, window_center=window_center, window_width=window_width)
+                                t_root=t_root, v_root=v_root,
+                                window_center=window_center,
+                                window_width=window_width,
+                                multi_slices=multi_slices,
+                                dcm_slices=dcm_slices)
     elif ml_type == 'segmentation':
         pass
     else:

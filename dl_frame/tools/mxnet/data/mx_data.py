@@ -1,12 +1,10 @@
 import os
 
-# from gluoncv.data import RecordFileDetection
 from mxnet.gluon.data import DataLoader
 from mxnet.gluon.data.vision import ImageRecordDataset, transforms as gdt
-from detection import RecordFileDetection
 
-from . import LstDetection
 from . import ImageFolderDataset
+from . import LstDetection, LstDcmDetection, RecordFileDetection
 
 DB_EXTENSIONS = {
     'rec': ['.REC'],
@@ -86,7 +84,10 @@ class LoaderFactory(object):
             if backend == IMAGE_TYPE_REC:
                 return DetectRecLoader(db_path, labels=labels, data_format=data_format, **kwargs)
             elif backend == IMAGE_TYPE_LST:
-                return DetectLstLoader(db_path, labels=labels, data_format=data_format, **kwargs)
+                if data_format == 'dicom':
+                    return DetectDcmLstLoader(db_path, labels=labels, data_format=data_format, **kwargs)
+                else:
+                    return DetectLstLoader(db_path, labels=labels, data_format=data_format, **kwargs)
         raise ValueError("Machine Learning type %s with %s not supported" % (ml_type, backend))
 
     def setup(self, batch_size, shuffle, fn, **kwargs):
@@ -168,6 +169,15 @@ class DetectLstLoader(DetectionLoader):
     def __init__(self, db_path, root, **kwargs):
         super(DetectLstLoader, self).__init__(db_path, **kwargs)
         self._dataset = LstDetection(db_path, root=root, flag=self.channel_flag, is_dicom=self.is_dicom)
+        self.data_volume = len(self._dataset)
+        self.channels = self._dataset[0][0].shape[-1]
+
+
+class DetectDcmLstLoader(DetectionLoader):
+
+    def __init__(self, db_path, root, **kwargs):
+        super(DetectDcmLstLoader, self).__init__(db_path, **kwargs)
+        self._dataset = LstDcmDetection(db_path, root=root, multi_slices=kwargs['multi_slices'], slice_width=kwargs['dcm_slices'])
         self.data_volume = len(self._dataset)
         self.channels = self._dataset[0][0].shape[-1]
 

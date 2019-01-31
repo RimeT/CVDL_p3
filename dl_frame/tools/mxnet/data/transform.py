@@ -212,8 +212,8 @@ class YOLO3TrainTransform(object):
 
     """
 
-    def __init__(self, width, height, net=None, mean=(0.485, 0.456, 0.406),
-                 std=(0.229, 0.224, 0.225), mixup=False, channels=3, **kwargs):
+    def __init__(self, width, height, net=None, mean=0.456,
+                 std=0.224, mixup=False, channels=3, **kwargs):
         self._width = width
         self._height = height
         self._mean = mean
@@ -224,7 +224,7 @@ class YOLO3TrainTransform(object):
             return
 
         # in case network has reset_ctx to gpu
-        self._fake_x = mx.nd.zeros((1, 3, height, width))
+        self._fake_x = mx.nd.zeros((1, channels, height, width))
         net = copy.deepcopy(net)
         self.channels = channels
         net.collect_params().reset_ctx(None)
@@ -303,7 +303,7 @@ class YOLO3ValTransform(object):
 
     """
 
-    def __init__(self, width, height, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
+    def __init__(self, width, height, mean=0.456, std=0.224):
         self._width = width
         self._height = height
         self._mean = mean
@@ -435,7 +435,7 @@ class FasterRCNNValTransform(object):
     """
 
     def __init__(self, short=600, max_size=1000,
-                 mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
+                 mean=0.456, std=0.229):
         self._mean = mean
         self._std = std
         self._short = short

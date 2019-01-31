@@ -361,8 +361,9 @@ class Detection(ModelFactory):
 
         t_volume = self.t_loader.niters
         self.t_week = t_volume / self.t_loader.batch_size
-        v_volume = self.v_loader.niters
-        v_week = v_volume / self.v_loader.batch_size
+        if self.v_loader:
+            v_volume = self.v_loader.niters
+            v_week = v_volume / self.v_loader.batch_size
 
         for epoch in range(epoch_num):
             self.epoch = epoch  # used for training log calculation
@@ -375,15 +376,16 @@ class Detection(ModelFactory):
             self.custom_obj.train_batch(self.net, self.optimizer, epoch, t_bar, self.lr_scheduler,
                                         self.t_loader.batch_size, self.ctx, self.log_interval, self.training_log)
             # validation & snapshots
-            if (epoch % valid_itv == 0) or (epoch % snap_itv == 0) or epoch == (epoch_num - 1):
-                v_bar = tqdm(self.v_loader.batch_loader, desc='Validation ', unit='batches')
-                nd.waitall()
-                map_name, mean_ap = self.custom_obj.validate(self.net, v_bar, self.ctx, eval_metric)
-                v_params = dict()
-                for name, ap in zip(map_name, mean_ap):
-                    v_params[name] = ap
-                print_train_stats(self.logger, 2, v_week, self.epoch, self.epoch_num, self.v_loader.niters,
-                                  v_params)
+            if self.v_loader:
+                if (epoch % valid_itv == 0) or (epoch % snap_itv == 0) or epoch == (epoch_num - 1):
+                    v_bar = tqdm(self.v_loader.batch_loader, desc='Validation ', unit='batches')
+                    nd.waitall()
+                    map_name, mean_ap = self.custom_obj.validate(self.net, v_bar, self.ctx, eval_metric)
+                    v_params = dict()
+                    for name, ap in zip(map_name, mean_ap):
+                        v_params[name] = ap
+                    print_train_stats(self.logger, 2, v_week, self.epoch, self.epoch_num, self.v_loader.niters,
+                                      v_params)
             # saving snapshots
             self.save_snap_shot(epoch, epoch_num, snap_itv, snap_pf, valid_itv)
             # if epoch % snap_itv == 0 or epoch == (epoch_num - 1):
