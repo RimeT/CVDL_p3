@@ -15,8 +15,7 @@ from mxnet import gluon, autograd
 class CustomModel(DetectionModel):
 
     def net_struct(self):
-        return get_model('ssd_512_vgg16_atrous_custom', classes=self.classes, pretrained_base=False,
-                         transfer='voc')
+        return get_model('ssd_512_vgg16_atrous_custom', pretrained=False, classes=self.classes, pretrained_base=False)
 
     @staticmethod
     def net_init():

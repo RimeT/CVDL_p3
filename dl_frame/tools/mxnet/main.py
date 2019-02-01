@@ -47,6 +47,7 @@ def main():
     else:
         multi_slices = False
     dcm_slices = int(config['data']['dcm_slices'])
+    accelerate = int(config['data']['accelerate'])
     label_txt = config['data']['label_txt']
     t_datapath = config['data']['train_path']
     t_root = config['data']['t_root']
@@ -185,7 +186,8 @@ def main():
                      rrc_ratio=rrc_ratio,
                      window_center=window_center,
                      window_width=window_width,
-                     channels=model.t_loader.channels)
+                     channels=model.t_loader.channels,
+                     accelerate=accelerate)
     print('data_setup costs={}'.format(time() - t1))
     t1 = time()
     model.trainer_config(optimizer, lr_mode, base_lr, epoch_num, wd, opt_param,

@@ -17,7 +17,6 @@ class CustomModel(DetectionModel):
         return get_model('yolo3_darknet53_custom', pretrained=False, classes=classes,
                          pretrained_base=False)
 
-
     def eval_metric(self):
         return VOC07MApMetric(iou_thresh=0.5, class_names=self.classes)
 
@@ -29,14 +28,20 @@ class CustomModel(DetectionModel):
         return True
 
     def train_data_transform(self, **kwargs):
-        return YOLO3TrainTransform(kwargs['r_width'], kwargs['r_height'], kwargs['net'], channels=kwargs['channels'])
+        return YOLO3TrainTransform(kwargs['r_width'], kwargs['r_height'], kwargs['net'], channels=kwargs['channels'],
+                                   window_center=kwargs['window_center'],
+                                   window_width=kwargs['window_width'],
+                                   window_transformed=kwargs['accelerate']
+                                   )
 
     def t_batchify_fn(self):
         return batchify.Tuple(*([batchify.Stack() for _ in range(6)] + [batchify.Pad(axis=0, pad_val=-1) for _ in range(
             1)]))
 
     def val_data_transform(self, **kwargs):
-        return YOLO3ValTransform(kwargs['r_width'], kwargs['r_height'])
+        return YOLO3ValTransform(kwargs['r_width'], kwargs['r_height'], window_center=kwargs['window_center'],
+                                 window_width=kwargs['window_width'],
+                                 window_transformed=kwargs['accelerate'])
 
     def v_batchify_fn(self):
         return batchify.Tuple(batchify.Stack(), batchify.Pad(pad_val=-1))

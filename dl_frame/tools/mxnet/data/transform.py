@@ -7,12 +7,13 @@ import numpy as np
 from gluoncv.data.transforms import bbox as tbbox, image as timage
 from gluoncv.data.transforms import experimental
 from mxnet import autograd
+from mxnet import nd
 from mxnet.gluon.block import Block
 
 
 def _window_transform(x, window_center, window_width, scale=255):
-    assert isinstance(x, np.ndarray), "Image type is not numpy.ndarray"
-    x = x.astype('float32')
+    assert isinstance(x, nd.ndarray.NDArray), "Image type is not numpy.ndarray"
+    x = x.asnumpy().astype('float32')
     max_hu = window_center + window_width / 2
     min_hu = window_center - window_width / 2
     image_out = np.zeros_like(x)
@@ -20,15 +21,15 @@ def _window_transform(x, window_center, window_width, scale=255):
     image_out[w1] = ((x[w1] - window_center + 0.5) / (window_width - 1) + 0.5) * scale
     image_out[x <= min_hu] = 0
     image_out[x >= max_hu] = scale
-    return image_out.astype('uint8')
+    return nd.array(image_out.astype('uint8'))
 
 
 def _image_rescale(x, scale=255):
     # prove to be OK
-    assert isinstance(x, np.ndarray)
-    x = x.astype('float32')
+    assert isinstance(x, nd.ndarray.NDArray)
+    x = x.asnumpy().astype('float32')
     x = scale * (x - np.min(x)) / np.ptp(x)
-    return x.astype('uint8')
+    return nd.array(x.astype('uint8'))
 
 
 class WindowConvert(Block):
@@ -82,9 +83,9 @@ class SSDTrainTransform(object):
 
     """
 
-    def __init__(self, width, height, anchors=None, mean=(0.485, 0.456, 0.406),
-                 std=(0.229, 0.224, 0.225), iou_thresh=0.5, box_norm=(0.1, 0.1, 0.2, 0.2),
-                 dicom=False,
+    def __init__(self, width, height, anchors=None, mean=0.456,
+                 std=0.224, iou_thresh=0.5, box_norm=(0.1, 0.1, 0.2, 0.2),
+                 dicom=False, window_transformed=False, window_center=0, window_width=0,
                  **kwargs):
         self._width = width
         self._height = height
@@ -92,6 +93,11 @@ class SSDTrainTransform(object):
         self._mean = mean
         self._std = std
         self._dicom = dicom
+        self.window_transformed = window_transformed
+        if not self.window_transformed:
+            self.window_width = window_width
+            self.window_center = window_center
+
         if anchors is None:
             return
 
@@ -125,6 +131,14 @@ class SSDTrainTransform(object):
         interp = np.random.randint(0, 5)
         img = timage.imresize(img, self._width, self._height, interp=interp)
         bbox = tbbox.resize(bbox, (w, h), (self._width, self._height))
+
+        # window_transform
+        if not self.window_transformed:
+            if self.window_width > 0:
+                img = _window_transform(img, window_center=self.window_center,
+                                        window_width=self.window_width)
+            else:
+                img = _image_rescale(img)
 
         # random horizontal flip
         h, w, _ = img.shape
@@ -165,11 +179,15 @@ class SSDValTransform(object):
 
     """
 
-    def __init__(self, width, height, mean=0.485, std=0.224):
+    def __init__(self, width, height, mean=0.485, std=0.224, window_transformed=False, window_center=0, window_width=0):
         self._width = width
         self._height = height
         self._mean = mean
         self._std = std
+        self.window_transformed = window_transformed
+        if not self.window_transformed:
+            self.window_width = window_width
+            self.window_center = window_center
 
     def __call__(self, src, label):
         """Apply transform to validation image/label."""
@@ -177,6 +195,14 @@ class SSDValTransform(object):
         h, w, _ = src.shape
         img = timage.imresize(src, self._width, self._height, interp=9)
         bbox = tbbox.resize(label, in_size=(w, h), out_size=(self._width, self._height))
+
+        # window_transform
+        if not self.window_transformed:
+            if self.window_width > 0:
+                img = _window_transform(img, window_center=self.window_center,
+                                        window_width=self.window_width)
+            else:
+                img = _image_rescale(img)
 
         img = mx.nd.image.to_tensor(img)
         img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
@@ -212,14 +238,20 @@ class YOLO3TrainTransform(object):
 
     """
 
-    def __init__(self, width, height, net=None, mean=0.456,
-                 std=0.224, mixup=False, channels=3, **kwargs):
+    def __init__(self, width, height, net=None, mean=(0.485, 0.456, 0.406),
+                 std=(0.229, 0.224, 0.225), mixup=False, channels=3, window_transformed=False, window_center=0,
+                 window_width=0,
+                 **kwargs):
         self._width = width
         self._height = height
         self._mean = mean
         self._std = std
         self._mixup = mixup
         self._target_generator = None
+        self.window_transformed = window_transformed
+        if not self.window_transformed:
+            self.window_width = window_width
+            self.window_center = window_center
         if net is None:
             return
 
@@ -242,6 +274,7 @@ class YOLO3TrainTransform(object):
         #     img = experimental.image.random_color_distort(src)
 
         # random expansion with prob 0.5
+        # modified by tiansong
         if np.random.uniform(0, 1) > 0.5 and self.channels == 3:
             img, expand = timage.random_expand(img, fill=[m * 255 for m in self._mean])
             bbox = tbbox.translate(label, x_offset=expand[0], y_offset=expand[1])
@@ -255,10 +288,18 @@ class YOLO3TrainTransform(object):
         img = mx.image.fixed_crop(img, x0, y0, w, h)
 
         # resize with random interpolation
-        h, w= img.shape[0:2]
+        h, w = img.shape[0:2]
         interp = np.random.randint(0, 5)
         img = timage.imresize(img, self._width, self._height, interp=interp)
         bbox = tbbox.resize(bbox, (w, h), (self._width, self._height))
+
+        # window_transform
+        if not self.window_transformed:
+            if self.window_width > 0:
+                img = _window_transform(img, window_center=self.window_center,
+                                        window_width=self.window_width)
+            else:
+                img = _image_rescale(img)
 
         # random horizontal flip
         h, w = img.shape[0:2]
@@ -303,11 +344,16 @@ class YOLO3ValTransform(object):
 
     """
 
-    def __init__(self, width, height, mean=0.456, std=0.224):
+    def __init__(self, width, height, mean=0.456, std=0.224, window_transformed=False, window_center=0, window_width=0,
+                 **kwargs):
         self._width = width
         self._height = height
         self._mean = mean
         self._std = std
+        self.window_transformed = window_transformed
+        if not self.window_transformed:
+            self.window_width = window_width
+            self.window_center = window_center
 
     def __call__(self, src, label):
         """Apply transform to validation image/label."""
@@ -315,6 +361,14 @@ class YOLO3ValTransform(object):
         h, w, _ = src.shape
         img = timage.imresize(src, self._width, self._height, interp=9)
         bbox = tbbox.resize(label, in_size=(w, h), out_size=(self._width, self._height))
+
+        # window_transform
+        if not self.window_transformed:
+            if self.window_width > 0:
+                img = _window_transform(img, window_center=self.window_center,
+                                        window_width=self.window_width)
+            else:
+                img = _image_rescale(img)
 
         img = mx.nd.image.to_tensor(img)
         img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
@@ -358,16 +412,20 @@ class FasterRCNNTrainTransform(object):
         to be sampled.
 
     """
-
-    def __init__(self, short=600, max_size=1000, net=None, mean=0.456,
-                 std=0.224, box_norm=(1., 1., 1., 1.),
+    def __init__(self, short=600, max_size=1000, net=None, mean=(0.485, 0.456, 0.406),
+                 std=(0.229, 0.224, 0.225), box_norm=(1., 1., 1., 1.),
                  num_sample=256, pos_iou_thresh=0.7, neg_iou_thresh=0.3,
-                 pos_ratio=0.5, **kwargs):
+                 pos_ratio=0.5, window_transformed=False, window_center=0, window_width=0, channels=3, **kwargs):
         self._short = short
         self._max_size = max_size
         self._mean = mean
         self._std = std
         self._anchors = None
+        self._channels = channels
+        self.window_transformed = window_transformed
+        if not self.window_transformed:
+            self.window_width = window_width
+            self.window_center = window_center
         if net is None:
             return
 
@@ -377,7 +435,7 @@ class FasterRCNNTrainTransform(object):
         anchor_generator = copy.deepcopy(net.rpn.anchor_generator)
         anchor_generator.collect_params().reset_ctx(None)
         anchors = anchor_generator(
-            mx.nd.zeros((1, 3, ashape, ashape))).reshape((1, 1, ashape, ashape, -1))
+            mx.nd.zeros((1, channels, ashape, ashape))).reshape((1, 1, ashape, ashape, -1))
         self._anchors = anchors
         # record feature extractor for infer_shape
         if not hasattr(net, 'features'):
@@ -392,12 +450,20 @@ class FasterRCNNTrainTransform(object):
     def __call__(self, src, label):
         """Apply transform to training image/label."""
         # resize shorter side but keep in max_size
-        h, w, _ = src.shape
+        h, w = src.shape[0:2]
         img = timage.resize_short_within(src, self._short, self._max_size, interp=1)
         bbox = tbbox.resize(label, (w, h), (img.shape[1], img.shape[0]))
 
+        # window_transform
+        if not self.window_transformed:
+            if self.window_width > 0:
+                img = _window_transform(img, window_center=self.window_center,
+                                        window_width=self.window_width)
+            else:
+                img = _image_rescale(img)
+
         # random horizontal flip
-        h, w, _ = img.shape
+        h, w = img.shape[0:2]
         img, flips = timage.random_flip(img, px=0.5)
         bbox = tbbox.flip(bbox, (w, h), flip_x=flips[0])
 
@@ -410,7 +476,7 @@ class FasterRCNNTrainTransform(object):
 
         # generate RPN target so cpu workers can help reduce the workload
         # feat_h, feat_w = (img.shape[1] // self._stride, img.shape[2] // self._stride)
-        oshape = self._feat_sym.infer_shape(data=(1, 3, img.shape[1], img.shape[2]))[1][0]
+        oshape = self._feat_sym.infer_shape(data=(1, self._channels, img.shape[1], img.shape[2]))[1][0]
         anchor = self._anchors[:, :, :oshape[2], :oshape[3], :].reshape((-1, 4))
         gt_bboxes = mx.nd.array(bbox[:, :4])
         cls_target, box_target, box_mask = self._target_generator(
@@ -433,19 +499,30 @@ class FasterRCNNValTransform(object):
         Standard deviation to be divided from image. Default is [0.229, 0.224, 0.225].
 
     """
-
     def __init__(self, short=600, max_size=1000,
-                 mean=0.456, std=0.229):
+                 mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225),
+                 window_transformed=False, window_center=0, window_width=0):
         self._mean = mean
         self._std = std
         self._short = short
         self._max_size = max_size
+        self.window_transformed = window_transformed
+        if not self.window_transformed:
+            self.window_width = window_width
+            self.window_center = window_center
 
     def __call__(self, src, label):
         """Apply transform to validation image/label."""
         # resize shorter side but keep in max_size
         h, w, _ = src.shape
         img = timage.resize_short_within(src, self._short, self._max_size, interp=1)
+        # window_transform
+        if not self.window_transformed:
+            if self.window_width > 0:
+                img = _window_transform(img, window_center=self.window_center,
+                                        window_width=self.window_width)
+            else:
+                img = _image_rescale(img)
         # no scaling ground-truth, return image scaling ratio instead
         bbox = tbbox.resize(label, (w, h), (img.shape[1], img.shape[0]))
         im_scale = h / float(img.shape[0])

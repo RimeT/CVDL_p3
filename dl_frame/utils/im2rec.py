@@ -22,6 +22,7 @@ from __future__ import print_function
 import argparse
 import os
 import random
+import re
 import sys
 import time
 import traceback
@@ -177,6 +178,21 @@ def read_list(path_in):
             yield item
 
 
+# add by tiansong
+def get_sample_fname(folder, instance_num, slice_num):
+    files = os.listdir(folder)
+    delta = slice_num // 2
+    sample_fname = range(instance_num - delta, instance_num + delta + 1)
+    for f in files:
+        sp = int(filter(str.isdigit, re.split('\.|_|-', f))[-1])
+        for idx in range(len(sample_fname)):
+            if sp == sample_fname[idx]:
+                sample_fname[idx] = os.path.join(folder, f)
+                break
+    return sample_fname
+# end by tiansong
+
+
 def image_encode(args, i, item, q_out):
     """Reads, preprocesses, packs the image and put it back in output queue.
     Parameters
@@ -187,7 +203,13 @@ def image_encode(args, i, item, q_out):
     q_out: queue
     """
     fullpath = os.path.join(args.root, item[1])
-
+    # add by tiansong
+    if args.multi_slices:
+        split_p = item[1].rfind('_')
+        bname = item[1][:split_p]
+        instance_num = int(item[1][split_p + 1:])
+        fullpath = os.path.join(args.root, bname)
+    # end by tiansong
     if len(item) > 3 and args.pack_label:
         header = mx.recordio.IRHeader(0, item[2:], item[0], 0)
     else:
@@ -206,12 +228,26 @@ def image_encode(args, i, item, q_out):
         return
 
     try:
-        if args.dicom:
+        # add by tiansong
+        if args.multi_slices:
+            sample_fnames = get_sample_fname(fullpath, instance_num, args.slice_num)
+            dcm_slices = list()
+            for f in sample_fnames:
+                if args.window_width == 0:
+                    one_slice = dcm_image_rescale(pydicom.dcmread(f).pixel_array)
+                else:
+                    one_slice = dcm_window_transform(pydicom.dcmread(f).pixel_array, window_center=args.window_center,
+                                                     window_width=args.window_width)
+                dcm_slices.append(np.expand_dims(one_slice, axis=0))
+            img = np.concatenate(dcm_slices, axis=0)
+            img = np.transpose(img, (1, 2, 0))
+        elif args.dicom:
             if args.window_width == 0:
                 img = dcm_image_rescale(pydicom.dcmread(fullpath).pixel_array)
             else:
                 img = dcm_window_transform(pydicom.dcmread(fullpath).pixel_array, window_center=args.window_center,
                                            window_width=args.window_width)
+        # end by tiansong
         else:
             img = cv2.imread(fullpath, args.color)
     except:
@@ -363,7 +399,18 @@ def parse_args():
                         help='specify the encoding of the images.')
     rgroup.add_argument('--pack-label', action='store_true',
                         help='Whether to also pack multi dimensional label in the record file')
+    # add by tiansong
+    rgroup.add_argument('--multi-slices', action='store_true',
+                        help='Whether to parse multi slices images')
+    rgroup.add_argument('--slice-num', type=int,
+                        help='Image num of slices')
     args = parser.parse_args()
+    # add by tiansong
+    if args.multi_slices:
+        args.dicom = True
+    if args.dicom:
+        args.color = 0
+    # end by tiansong
     args.prefix = os.path.abspath(args.prefix)
     args.root = os.path.abspath(args.root)
     return args

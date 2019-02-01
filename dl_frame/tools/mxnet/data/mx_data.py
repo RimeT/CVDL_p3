@@ -65,7 +65,11 @@ class LoaderFactory(object):
         self.channels = 1
         self.is_dicom = False
         if data_format == 'dicom':
-            self.channel_flag = 0
+            if kwargs['multi_slices']:
+                if kwargs['dcm_slices'] == 3:
+                    self.channel_flag = 1
+            else:
+                self.channel_flag = 0
             self.is_dicom = True
         self.data_volume = 0
         self.batch_size = None

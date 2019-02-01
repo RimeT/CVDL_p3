@@ -38,9 +38,9 @@ def xml2voc(in_dir, out_dir, dcm_width, dcm_height):
 
 parser = argparse.ArgumentParser(description='XML to MXNET LST parser')
 parser.add_argument('indir',
-                    help='lst file basename')
+                    help='Annotation directory')
 parser.add_argument('outdir',
-                    help='output directory path')
+                    help='Output directory path')
 parser.add_argument('--width', type=int)
 parser.add_argument('--height', type=int)
 # parser.add_argument('--multi-slices', action='store_true',

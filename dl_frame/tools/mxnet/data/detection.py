@@ -8,7 +8,7 @@ import os
 import mxnet as mx
 import numpy as np
 import pydicom
-import SimpleITK as sitk
+import re
 from gluoncv.data.recordio.detection import _transform_label
 from mxnet import nd, gluon
 from mxnet.gluon.data import Dataset
@@ -83,6 +83,18 @@ class LstDetection(Dataset):
         return img, label
 
 
+def _get_sample_fname(folder, instance_num, delta):
+    files = os.listdir(folder)
+    sample_fname = range(instance_num - delta, instance_num + delta + 1)
+    for f in files:
+        sp = int(filter(str.isdigit, re.split('\.|_|-', f))[-1])
+        for idx in range(len(sample_fname)):
+            if sp == sample_fname[idx]:
+                sample_fname[idx] = os.path.join(folder, f)
+                break
+    return sample_fname
+
+
 class LstDcmDetection(Dataset):
     """Detection dataset loaded from LST file and raw images.
     LST file is a pure text file but with special label format.
@@ -126,15 +138,14 @@ class LstDcmDetection(Dataset):
         if self._multi_slices:
             split_p = self._items[idx].rfind('_')
             bname = self._items[idx][:split_p]
-            slice_num = int(self._items[idx][split_p + 1:])
+            instance_num = int(self._items[idx][split_p + 1:])
             im_path = os.path.join(self._root, bname)
-            reader = sitk.ImageSeriesReader()
-            seriesIDs = reader.GetGDCMSeriesIDs(im_path)
-            dicom_names = reader.GetGDCMSeriesFileNames(im_path, seriesIDs[0])
-            reader.SetFileNames(dicom_names)
-            image = reader.Execute()
-            image_array = sitk.GetArrayFromImage(image)
-            img = image_array[slice_num - self._delta:slice_num + self._delta + 1]
+            dcm_slices = list()
+            sample_fnames = _get_sample_fname(im_path, instance_num, self._delta)
+            for f in sample_fnames:
+                one_slice = pydicom.dcmread(f).pixel_array
+                dcm_slices.append(np.expand_dims(one_slice, axis=0))
+            img = np.concatenate(dcm_slices, axis=0)
             img = nd.array(np.transpose(img, (1, 2, 0)))
         else:
             im_path = os.path.join(self._root, self._items[idx])
