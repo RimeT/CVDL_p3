@@ -35,8 +35,7 @@ class CustomModel(DetectionModel):
             _, _, anchors = net(mx.nd.zeros(shape=(1, kwargs['channels'], kwargs['r_height'], kwargs['r_width'])))
         return SSDTrainTransform(kwargs['r_width'], kwargs['r_height'], anchors, dicom=True,
                                  window_center=kwargs['window_center'],
-                                 window_width=kwargs['window_width'],
-                                 window_transformed=kwargs['accelerate'])
+                                 window_width=kwargs['window_width'])
 
     def t_batchify_fn(self):
         return batchify.Tuple(batchify.Stack(), batchify.Stack(), batchify.Stack())
@@ -45,8 +44,7 @@ class CustomModel(DetectionModel):
         # mx.nd.waitall()
         return SSDValTransform(kwargs['r_width'], kwargs['r_height'],
                                window_center=kwargs['window_center'],
-                               window_width=kwargs['window_width'],
-                               window_transformed=kwargs['accelerate'])
+                               window_width=kwargs['window_width'])
 
     def v_batchify_fn(self):
         return batchify.Tuple(batchify.Stack(), batchify.Pad(pad_val=-1))

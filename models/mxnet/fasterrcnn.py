@@ -110,7 +110,6 @@ class CustomModel(DetectionModel):
         return FasterRCNNTrainTransform(net.short, net.max_size, net,
                                         window_center=kwargs['window_center'],
                                         window_width=kwargs['window_width'],
-                                        window_transformed=kwargs['accelerate'],
                                         channels=kwargs['channels'])
 
     def t_batchify_fn(self):
@@ -120,8 +119,7 @@ class CustomModel(DetectionModel):
         net = kwargs['net']
         return FasterRCNNValTransform(net.short, net.max_size,
                                       window_center=kwargs['window_center'],
-                                      window_width=kwargs['window_width'],
-                                      window_transformed=kwargs['accelerate'])
+                                      window_width=kwargs['window_width'])
 
     def v_batchify_fn(self):
         return batchify.Tuple(*[batchify.Append() for _ in range(3)])

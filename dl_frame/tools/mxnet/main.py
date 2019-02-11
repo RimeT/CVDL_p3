@@ -47,7 +47,6 @@ def main():
     else:
         multi_slices = False
     dcm_slices = int(config['data']['dcm_slices'])
-    accelerate = int(config['data']['accelerate'])
     label_txt = config['data']['label_txt']
     t_datapath = config['data']['train_path']
     t_root = config['data']['t_root']
@@ -59,7 +58,6 @@ def main():
     param_path = None if len(param_path) < 1 else param_path
     # -hyper-param
     gpus = [int(i) for i in config['hyper-param']['gpus'].split(',')]
-    # gpus = [i for i in mx.test_utils.list_gpus()]
     snap_interval = int(config['hyper-param']['snap_interval'])
     val_interval = int(config['hyper-param']['val_interval'])
     epoch_num = int(config['hyper-param']['epochs'])
@@ -149,6 +147,7 @@ def main():
             labels = [l.strip() for l in label_f.readlines()]
     else:
         raise ValueError('labels file can not be accessed')
+
     # dataloader
     if ml_type == 'classification':
         model.create_dataloader(t_datapath, v_datapath, data_format=data_format, labels=labels,
@@ -186,8 +185,7 @@ def main():
                      rrc_ratio=rrc_ratio,
                      window_center=window_center,
                      window_width=window_width,
-                     channels=model.t_loader.channels,
-                     accelerate=accelerate)
+                     channels=model.t_loader.channels)
     print('data_setup costs={}'.format(time() - t1))
     t1 = time()
     model.trainer_config(optimizer, lr_mode, base_lr, epoch_num, wd, opt_param,
@@ -199,6 +197,16 @@ def main():
                          warmup_lr=warmup_lr,
                          warmup_mode=warmup_mode)
     print('trainer_config costs={}'.format(time() - t1))
+
+    # save info
+    info_path = os.path.join(job_dir, "dl_info.json")
+    dl_info = {"dl_frame": "mxnet", 'dl_type': ml_type, 'resize_type': resize_type, 'width': width, 'height': height,
+               'window_center': window_center, "window_width": window_width, "channels": model.t_loader.channels,
+               "labels": labels}
+    with open(info_path, 'w') as info_f:
+        json.dump(dl_info, info_f, allow_nan=False)
+        print("dl info file write to %s" % info_path)
+    # do training
     model.start_train(epoch_num, os.path.join(job_dir, snap_prefix),
                       snap_interval, val_interval)
 

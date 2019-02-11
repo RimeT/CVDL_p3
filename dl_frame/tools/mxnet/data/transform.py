@@ -85,7 +85,7 @@ class SSDTrainTransform(object):
 
     def __init__(self, width, height, anchors=None, mean=0.456,
                  std=0.224, iou_thresh=0.5, box_norm=(0.1, 0.1, 0.2, 0.2),
-                 dicom=False, window_transformed=False, window_center=0, window_width=0,
+                 dicom=False, window_center=0, window_width=0,
                  **kwargs):
         self._width = width
         self._height = height
@@ -93,7 +93,7 @@ class SSDTrainTransform(object):
         self._mean = mean
         self._std = std
         self._dicom = dicom
-        self.window_transformed = window_transformed
+        self.window_transformed = True if window_width < 1 else False
         if not self.window_transformed:
             self.window_width = window_width
             self.window_center = window_center
@@ -179,12 +179,12 @@ class SSDValTransform(object):
 
     """
 
-    def __init__(self, width, height, mean=0.485, std=0.224, window_transformed=False, window_center=0, window_width=0):
+    def __init__(self, width, height, mean=0.485, std=0.224, window_center=0, window_width=0):
         self._width = width
         self._height = height
         self._mean = mean
         self._std = std
-        self.window_transformed = window_transformed
+        self.window_transformed = True if window_width < 1 else False
         if not self.window_transformed:
             self.window_width = window_width
             self.window_center = window_center
@@ -239,7 +239,7 @@ class YOLO3TrainTransform(object):
     """
 
     def __init__(self, width, height, net=None, mean=(0.485, 0.456, 0.406),
-                 std=(0.229, 0.224, 0.225), mixup=False, channels=3, window_transformed=False, window_center=0,
+                 std=(0.229, 0.224, 0.225), mixup=False, channels=3, window_center=0,
                  window_width=0,
                  **kwargs):
         self._width = width
@@ -248,7 +248,7 @@ class YOLO3TrainTransform(object):
         self._std = std
         self._mixup = mixup
         self._target_generator = None
-        self.window_transformed = window_transformed
+        self.window_transformed = True if window_width < 1 else False
         if not self.window_transformed:
             self.window_width = window_width
             self.window_center = window_center
@@ -344,13 +344,13 @@ class YOLO3ValTransform(object):
 
     """
 
-    def __init__(self, width, height, mean=0.456, std=0.224, window_transformed=False, window_center=0, window_width=0,
+    def __init__(self, width, height, mean=0.456, std=0.224, window_center=0, window_width=0,
                  **kwargs):
         self._width = width
         self._height = height
         self._mean = mean
         self._std = std
-        self.window_transformed = window_transformed
+        self.window_transformed = True if window_width < 1 else False
         if not self.window_transformed:
             self.window_width = window_width
             self.window_center = window_center
@@ -415,14 +415,14 @@ class FasterRCNNTrainTransform(object):
     def __init__(self, short=600, max_size=1000, net=None, mean=(0.485, 0.456, 0.406),
                  std=(0.229, 0.224, 0.225), box_norm=(1., 1., 1., 1.),
                  num_sample=256, pos_iou_thresh=0.7, neg_iou_thresh=0.3,
-                 pos_ratio=0.5, window_transformed=False, window_center=0, window_width=0, channels=3, **kwargs):
+                 pos_ratio=0.5, window_center=0, window_width=0, channels=3, **kwargs):
         self._short = short
         self._max_size = max_size
         self._mean = mean
         self._std = std
         self._anchors = None
         self._channels = channels
-        self.window_transformed = window_transformed
+        self.window_transformed = True if window_width < 1 else False
         if not self.window_transformed:
             self.window_width = window_width
             self.window_center = window_center
@@ -501,12 +501,12 @@ class FasterRCNNValTransform(object):
     """
     def __init__(self, short=600, max_size=1000,
                  mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225),
-                 window_transformed=False, window_center=0, window_width=0):
+                 window_center=0, window_width=0):
         self._mean = mean
         self._std = std
         self._short = short
         self._max_size = max_size
-        self.window_transformed = window_transformed
+        self.window_transformed = True if window_width < 1 else False
         if not self.window_transformed:
             self.window_width = window_width
             self.window_center = window_center
