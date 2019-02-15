@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import mxnet as mx
+import copy
 from tqdm import tqdm
 from gluoncv.data import batchify
 
@@ -13,7 +14,7 @@ class Model(object):
         if classes is None:
             self.classes = [str(i) for i in range(1000)]
         else:
-            self.classes = classes
+            self.classes = copy.copy(classes)
         self.ctx = ctx
         self.logger = logger
 

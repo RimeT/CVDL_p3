@@ -1,8 +1,8 @@
+import copy
 from time import time
 
 import gluoncv as gcv
 import mxnet as mx
-import copy
 from custom_model import DetectionModel
 from data.transform import SSDTrainTransform, SSDValTransform
 from gluoncv.data import batchify
@@ -35,7 +35,8 @@ class CustomModel(DetectionModel):
             _, _, anchors = net(mx.nd.zeros(shape=(1, kwargs['channels'], kwargs['r_height'], kwargs['r_width'])))
         return SSDTrainTransform(kwargs['r_width'], kwargs['r_height'], anchors, dicom=True,
                                  window_center=kwargs['window_center'],
-                                 window_width=kwargs['window_width'])
+                                 window_width=kwargs['window_width'],
+                                 channels=kwargs['channels'])
 
     def t_batchify_fn(self):
         return batchify.Tuple(batchify.Stack(), batchify.Stack(), batchify.Stack())
@@ -44,7 +45,8 @@ class CustomModel(DetectionModel):
         # mx.nd.waitall()
         return SSDValTransform(kwargs['r_width'], kwargs['r_height'],
                                window_center=kwargs['window_center'],
-                               window_width=kwargs['window_width'])
+                               window_width=kwargs['window_width'],
+                               channels=kwargs['channels'])
 
     def v_batchify_fn(self):
         return batchify.Tuple(batchify.Stack(), batchify.Pad(pad_val=-1))
@@ -60,7 +62,7 @@ class CustomModel(DetectionModel):
         self.smoothl1_metric = mx.metric.Loss('SmoothL1')
         self.bast_map = [0]
 
-    def validate(self, net, batch_loader, ctx, eval_metric):
+    def validate(self, net, batch_loader, ctx, eval_metric, test_cb=None):
         """Test on validation dataset."""
         eval_metric.reset()
         # set nms threshold and topk constraint
@@ -86,6 +88,23 @@ class CustomModel(DetectionModel):
                 gt_ids.append(y.slice_axis(axis=-1, begin=4, end=5))
                 gt_bboxes.append(y.slice_axis(axis=-1, begin=0, end=4))
                 gt_difficults.append(y.slice_axis(axis=-1, begin=5, end=6) if y.shape[-1] > 5 else None)
+            # testing callback
+            if test_cb:
+                for img_result in zip(det_ids, det_scores, det_bboxes, gt_ids, gt_bboxes):
+                    pred_cb = list()
+                    for z_pred in zip(img_result[0][0], img_result[1][0], img_result[2][0]):
+                        if z_pred[0] >= 0:
+                            a_box = [zp.asnumpy().tolist() for zp in z_pred]
+                            a_box[0] = int(a_box[0][0])
+                            a_box[1] = a_box[1][0]
+                            pred_cb.append(a_box)
+                    gt_cb = list()
+                    for z_gt in zip(img_result[3][0], img_result[4][0]):
+                        if z_gt[0] >= 0:
+                            a_box = [zg.asnumpy().tolist() for zg in z_gt]
+                            a_box[0] = int(a_box[0][0])
+                            gt_cb.append(a_box)
+                    test_cb(pred_cb, gt_cb)
 
             # update metric
             eval_metric.update(det_bboxes, det_ids, det_scores, gt_bboxes, gt_ids, gt_difficults)

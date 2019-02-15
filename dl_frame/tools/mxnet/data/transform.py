@@ -83,9 +83,9 @@ class SSDTrainTransform(object):
 
     """
 
-    def __init__(self, width, height, anchors=None, mean=0.456,
-                 std=0.224, iou_thresh=0.5, box_norm=(0.1, 0.1, 0.2, 0.2),
-                 dicom=False, window_center=0, window_width=0,
+    def __init__(self, width, height, anchors=None, mean=(0.485, 0.456, 0.406),
+                 std=(0.229, 0.224, 0.225), iou_thresh=0.5, box_norm=(0.1, 0.1, 0.2, 0.2),
+                 dicom=False, window_center=0, window_width=0, channels=3,
                  **kwargs):
         self._width = width
         self._height = height
@@ -94,6 +94,7 @@ class SSDTrainTransform(object):
         self._std = std
         self._dicom = dicom
         self.window_transformed = True if window_width < 1 else False
+        self.channels = channels
         if not self.window_transformed:
             self.window_width = window_width
             self.window_center = window_center
@@ -137,8 +138,8 @@ class SSDTrainTransform(object):
             if self.window_width > 0:
                 img = _window_transform(img, window_center=self.window_center,
                                         window_width=self.window_width)
-            else:
-                img = _image_rescale(img)
+        else:
+            img = _image_rescale(img)
 
         # random horizontal flip
         h, w, _ = img.shape
@@ -147,10 +148,10 @@ class SSDTrainTransform(object):
 
         # to tensor
         img = mx.nd.image.to_tensor(img)
-        if not self._dicom:
+        if self.channels == 3:
             img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
         else:
-            img = mx.nd.image.normalize(img, mean=0.456, std=0.224)
+            img = mx.nd.image.normalize(img, mean=self._mean[:self.channels], std=self._std[:self.channels])
 
         if self._anchors is None:
             return img, bbox.astype(img.dtype)
@@ -179,11 +180,13 @@ class SSDValTransform(object):
 
     """
 
-    def __init__(self, width, height, mean=0.485, std=0.224, window_center=0, window_width=0):
+    def __init__(self, width, height, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), window_center=0,
+                 window_width=0, channels=3, **kwargs):
         self._width = width
         self._height = height
         self._mean = mean
         self._std = std
+        self.channels = channels
         self.window_transformed = True if window_width < 1 else False
         if not self.window_transformed:
             self.window_width = window_width
@@ -201,11 +204,14 @@ class SSDValTransform(object):
             if self.window_width > 0:
                 img = _window_transform(img, window_center=self.window_center,
                                         window_width=self.window_width)
-            else:
-                img = _image_rescale(img)
+        else:
+            img = _image_rescale(img)
 
         img = mx.nd.image.to_tensor(img)
-        img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
+        if self.channels == 3:
+            img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
+        else:
+            img = mx.nd.image.normalize(img, mean=self._mean[:self.channels], std=self._std[:self.channels])
         return img, bbox.astype(img.dtype)
 
 
@@ -298,8 +304,8 @@ class YOLO3TrainTransform(object):
             if self.window_width > 0:
                 img = _window_transform(img, window_center=self.window_center,
                                         window_width=self.window_width)
-            else:
-                img = _image_rescale(img)
+        else:
+            img = _image_rescale(img)
 
         # random horizontal flip
         h, w = img.shape[0:2]
@@ -310,6 +316,9 @@ class YOLO3TrainTransform(object):
         img = mx.nd.image.to_tensor(img)
         if self.channels == 3:
             img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
+        else:
+            # debug: need to be proved
+            img = mx.nd.image.normalize(img, mean=self._mean[:self.channels], std=self._std[:self.channels])
 
         if self._target_generator is None:
             return img, bbox.astype(img.dtype)
@@ -344,12 +353,15 @@ class YOLO3ValTransform(object):
 
     """
 
-    def __init__(self, width, height, mean=0.456, std=0.224, window_center=0, window_width=0,
+    def __init__(self, width, height, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), window_center=0,
+                 window_width=0, channels=3,
                  **kwargs):
         self._width = width
         self._height = height
         self._mean = mean
         self._std = std
+        self.channels = channels
+
         self.window_transformed = True if window_width < 1 else False
         if not self.window_transformed:
             self.window_width = window_width
@@ -367,11 +379,14 @@ class YOLO3ValTransform(object):
             if self.window_width > 0:
                 img = _window_transform(img, window_center=self.window_center,
                                         window_width=self.window_width)
-            else:
-                img = _image_rescale(img)
+        else:
+            img = _image_rescale(img)
 
         img = mx.nd.image.to_tensor(img)
-        img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
+        if self.channels == 3:
+            img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
+        else:
+            img = mx.nd.image.normalize(img, mean=self._mean[:self.channels], std=self._std[:self.channels])
         return img, bbox.astype(img.dtype)
 
 
@@ -412,6 +427,7 @@ class FasterRCNNTrainTransform(object):
         to be sampled.
 
     """
+
     def __init__(self, short=600, max_size=1000, net=None, mean=(0.485, 0.456, 0.406),
                  std=(0.229, 0.224, 0.225), box_norm=(1., 1., 1., 1.),
                  num_sample=256, pos_iou_thresh=0.7, neg_iou_thresh=0.3,
@@ -459,8 +475,8 @@ class FasterRCNNTrainTransform(object):
             if self.window_width > 0:
                 img = _window_transform(img, window_center=self.window_center,
                                         window_width=self.window_width)
-            else:
-                img = _image_rescale(img)
+        else:
+            img = _image_rescale(img)
 
         # random horizontal flip
         h, w = img.shape[0:2]
@@ -469,7 +485,8 @@ class FasterRCNNTrainTransform(object):
 
         # to tensor
         img = mx.nd.image.to_tensor(img)
-        img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
+        if self._channels == 3:
+            img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
 
         if self._anchors is None:
             return img, bbox.astype(img.dtype)
@@ -499,13 +516,15 @@ class FasterRCNNValTransform(object):
         Standard deviation to be divided from image. Default is [0.229, 0.224, 0.225].
 
     """
+
     def __init__(self, short=600, max_size=1000,
                  mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225),
-                 window_center=0, window_width=0):
+                 window_center=0, window_width=0, channels=3):
         self._mean = mean
         self._std = std
         self._short = short
         self._max_size = max_size
+        self._channels = channels
         self.window_transformed = True if window_width < 1 else False
         if not self.window_transformed:
             self.window_width = window_width
@@ -521,12 +540,13 @@ class FasterRCNNValTransform(object):
             if self.window_width > 0:
                 img = _window_transform(img, window_center=self.window_center,
                                         window_width=self.window_width)
-            else:
-                img = _image_rescale(img)
+        else:
+            img = _image_rescale(img)
         # no scaling ground-truth, return image scaling ratio instead
         bbox = tbbox.resize(label, (w, h), (img.shape[1], img.shape[0]))
         im_scale = h / float(img.shape[0])
 
         img = mx.nd.image.to_tensor(img)
-        img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
+        if self._channels == 3:
+            img = mx.nd.image.normalize(img, mean=self._mean, std=self._std)
         return img, bbox.astype('float32'), mx.nd.array([im_scale])

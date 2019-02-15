@@ -118,11 +118,14 @@ class ClassLoader(LoaderFactory):
             # dicom window transformation
             gdt.ToTensor(),
         ])
+        last_batch = 'rollover'
+        if 'last_batch' in kwargs:
+            last_batch = kwargs['last_batch']
         self.batch_loader = DataLoader(dataset=self._dataset.transform_first(fn=transformer),
                                        batch_size=batch_size,
                                        shuffle=shuffle,
                                        num_workers=8,
-                                       last_batch='rollover',
+                                       last_batch=last_batch,
                                        pin_memory=True)
         self.niters = len(self.batch_loader)
 
@@ -158,10 +161,13 @@ class DetectionLoader(LoaderFactory):
         window_center = 0 if 'window_center' not in kwargs else kwargs['window_center']
         window_width = 0 if 'window_width' not in kwargs else kwargs['window_width']
         batchify_fn = kwargs['batchify_fn']
+        last_batch = 'rollover'
+        if 'last_batch' in kwargs:
+            last_batch = kwargs['last_batch']
         self.batch_loader = DataLoader(self._dataset.transform(fn),
                                        batch_size, shuffle,
                                        batchify_fn=batchify_fn,
-                                       last_batch='rollover',
+                                       last_batch=last_batch,
                                        # num_workers=8,
                                        pin_memory=True
                                        )

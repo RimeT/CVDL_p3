@@ -93,7 +93,8 @@ class CustomModel(DetectionModel):
 
     def net_struct(self):
         # return get_model('faster_rcnn_resnet50_v1b_custom', classes=self.classes, pretrained_base=False, transfer='voc')
-        return get_model('faster_rcnn_resnet50_v1b_custom', pretrained=False, classes=self.classes, pretrained_base=False)
+        return get_model('faster_rcnn_resnet50_v1b_custom', pretrained=False, classes=self.classes,
+                         pretrained_base=False)
 
     @staticmethod
     def net_init():
@@ -119,7 +120,8 @@ class CustomModel(DetectionModel):
         net = kwargs['net']
         return FasterRCNNValTransform(net.short, net.max_size,
                                       window_center=kwargs['window_center'],
-                                      window_width=kwargs['window_width'])
+                                      window_width=kwargs['window_width'],
+                                      channels=kwargs['channels'])
 
     def v_batchify_fn(self):
         return batchify.Tuple(*[batchify.Append() for _ in range(3)])
@@ -148,7 +150,7 @@ class CustomModel(DetectionModel):
             new_batch.append(new_data)
         return new_batch
 
-    def validate(self, net, val_data, ctx, eval_metric):
+    def validate(self, net, val_data, ctx, eval_metric, test_cb=None):
         """Test on validation dataset."""
         clipper = gcv.nn.bbox.BBoxClipToImage()
         eval_metric.reset()
@@ -176,6 +178,24 @@ class CustomModel(DetectionModel):
                 gt_bboxes.append(y.slice_axis(axis=-1, begin=0, end=4))
                 gt_bboxes[-1] *= im_scale
                 gt_difficults.append(y.slice_axis(axis=-1, begin=5, end=6) if y.shape[-1] > 5 else None)
+
+            # testing callback
+            if test_cb:
+                for img_result in zip(det_ids, det_scores, det_bboxes, gt_ids, gt_bboxes):
+                    pred_cb = list()
+                    for z_pred in zip(img_result[0][0], img_result[1][0], img_result[2][0]):
+                        if z_pred[0] >= 0:
+                            a_box = [zp.asnumpy().tolist() for zp in z_pred]
+                            a_box[0] = int(a_box[0][0])
+                            a_box[1] = a_box[1][0]
+                            pred_cb.append(a_box)
+                    gt_cb = list()
+                    for z_gt in zip(img_result[3][0], img_result[4][0]):
+                        if z_gt[0] >= 0:
+                            a_box = [zg.asnumpy().tolist() for zg in z_gt]
+                            a_box[0] = int(a_box[0][0])
+                            gt_cb.append(a_box)
+                    test_cb(pred_cb, gt_cb)
 
             # update metric
             for det_bbox, det_id, det_score, gt_bbox, gt_id, gt_diff in zip(det_bboxes, det_ids, det_scores, gt_bboxes,

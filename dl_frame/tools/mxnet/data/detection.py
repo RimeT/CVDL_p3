@@ -82,6 +82,9 @@ class LstDetection(Dataset):
             label = _transform_label(label)
         return img, label
 
+    def get_item_list(self):
+        return self._items
+
 
 def _get_sample_fname(folder, instance_num, delta):
     files = os.listdir(folder)
@@ -157,3 +160,6 @@ class LstDcmDetection(Dataset):
         else:
             label = _transform_label(label)
         return img, label
+
+    def get_item_list(self):
+        return self._items
